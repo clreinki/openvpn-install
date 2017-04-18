@@ -77,7 +77,8 @@ if [[ -e /etc/openvpn/server.conf ]]; then
 		echo "   1) Add a new user"
 		echo "   2) Revoke an existing user"
 		echo "   3) Remove OpenVPN"
-		echo "   4) Exit"
+		echo "   4) Remove existing .ovpn files from HTTP"
+		echo "   5) Exit"
 		read -p "Select an option [1-4]: " option
 		case $option in
 			1) 
@@ -89,8 +90,13 @@ if [[ -e /etc/openvpn/server.conf ]]; then
 			./easyrsa build-client-full $CLIENT nopass
 			# Generates the custom client.ovpn
 			newclient "$CLIENT"
+			# Generates random string for qr code
+			TEMPNAME=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 32 | head -n 1)
+			cp $CLIENT.ovpn /var/www/html/$TEMPNAME.ovpn
 			echo ""
-			echo "Client $CLIENT added, configuration is available at" ~/"$CLIENT.ovpn"
+			qrcode-terminal "http://$IP/$TEMPNAME.ovpn"
+			echo "Your client configuration is available at" ~/"$CLIENT.ovpn for secure transfer"
+			echo "Client configuration is also available for insecure download from http://$IP/$TEMPNAME.ovpn"
 			exit
 			;;
 			2)
@@ -135,6 +141,7 @@ if [[ -e /etc/openvpn/server.conf ]]; then
 					IP=$(firewall-cmd --direct --get-rules ipv4 nat POSTROUTING | grep '\-s 10.8.0.0/24 -j SNAT --to ' | cut -d " " -f 7)
 					# Using both permanent and not permanent rules to avoid a firewalld reload.
 					firewall-cmd --zone=public --remove-port=$PORT/$PROTOCOL
+					firewall-cmd --zone=public --remove-port=80/tcp
 					firewall-cmd --zone=trusted --remove-source=10.8.0.0/24
 					firewall-cmd --permanent --zone=public --remove-port=$PORT/$PROTOCOL
 					firewall-cmd --permanent --zone=trusted --remove-source=10.8.0.0/24
@@ -146,6 +153,7 @@ if [[ -e /etc/openvpn/server.conf ]]; then
 					sed -i '/iptables -t nat -A POSTROUTING -s 10.8.0.0\/24 -j SNAT --to /d' $RCLOCAL
 					if iptables -L -n | grep -qE '^ACCEPT'; then
 						iptables -D INPUT -p $PROTOCOL --dport $PORT -j ACCEPT
+						iptables -D INPUT -p tcp --dport 80 -j ACCEPT
 						iptables -D FORWARD -s 10.8.0.0/24 -j ACCEPT
 						iptables -D FORWARD -m state --state RELATED,ESTABLISHED -j ACCEPT
 						sed -i "/iptables -I INPUT -p $PROTOCOL --dport $PORT -j ACCEPT/d" $RCLOCAL
@@ -161,9 +169,9 @@ if [[ -e /etc/openvpn/server.conf ]]; then
 					fi
 				fi
 				if [[ "$OS" = 'debian' ]]; then
-					apt-get remove --purge -y openvpn openvpn-blacklist
+					apt-get remove --purge -y openvpn openvpn-blacklist apache2 nodejs-legacy npm
 				else
-					yum remove openvpn -y
+					yum remove openvpn nodejs npm httpd -y
 				fi
 				rm -rf /etc/openvpn
 				rm -rf /usr/share/doc/openvpn*
@@ -175,7 +183,11 @@ if [[ -e /etc/openvpn/server.conf ]]; then
 			fi
 			exit
 			;;
-			4) exit;;
+			4)
+			rm -f /var/www/html/*.ovpn
+			exit
+			;;
+			5) exit;;
 		esac
 	done
 else
@@ -223,11 +235,14 @@ else
 	read -n1 -r -p "Press any key to continue..."
 	if [[ "$OS" = 'debian' ]]; then
 		apt-get update
-		apt-get install openvpn iptables openssl ca-certificates -y
+		apt-get install openvpn iptables openssl ca-certificates apache2 npm nodejs-legacy -y
+		npm install -g qrcode-terminal
 	else
 		# Else, the distro is CentOS
 		yum install epel-release -y
-		yum install openvpn iptables openssl wget ca-certificates -y
+		yum install openvpn iptables openssl wget ca-certificates httpd -y
+		yum install nodejs npm -y --enablerepo=epel
+		npm install -g qrcode-terminal
 	fi
 	# An old version of easy-rsa was available by default in some openvpn packages
 	if [[ -d /etc/openvpn/easy-rsa/ ]]; then
@@ -320,6 +335,7 @@ crl-verify crl.pem" >> /etc/openvpn/server.conf
 		# We don't use --add-service=openvpn because that would only work with
 		# the default port and protocol.
 		firewall-cmd --zone=public --add-port=$PORT/$PROTOCOL
+		firewall-cmd --zone=public --add-port=80/tcp
 		firewall-cmd --zone=trusted --add-source=10.8.0.0/24
 		firewall-cmd --permanent --zone=public --add-port=$PORT/$PROTOCOL
 		firewall-cmd --permanent --zone=trusted --add-source=10.8.0.0/24
@@ -341,6 +357,7 @@ exit 0' > $RCLOCAL
 			# Not the best approach but I can't think of other and this shouldn't
 			# cause problems.
 			iptables -I INPUT -p $PROTOCOL --dport $PORT -j ACCEPT
+			iptables -I INPUT -p tcp --dport 80 -j ACCEPT
 			iptables -I FORWARD -s 10.8.0.0/24 -j ACCEPT
 			iptables -I FORWARD -m state --state RELATED,ESTABLISHED -j ACCEPT
 			sed -i "1 a\iptables -I INPUT -p $PROTOCOL --dport $PORT -j ACCEPT" $RCLOCAL
@@ -409,9 +426,14 @@ key-direction 1
 verb 3" > /etc/openvpn/client-common.txt
 	# Generates the custom client.ovpn
 	newclient "$CLIENT"
+	# Generates random string for qr code
+	TEMPNAME=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 32 | head -n 1)
+	cp $CLIENT.ovpn /var/www/html/$TEMPNAME.ovpn
 	echo ""
 	echo "Finished!"
 	echo ""
-	echo "Your client configuration is available at" ~/"$CLIENT.ovpn"
+	qrcode-terminal "http://$IP/$TEMPNAME.ovpn"
+	echo "Your client configuration is available at" ~/"$CLIENT.ovpn for secure transfer"
+	echo "Client configuration is also available for insecure download from http://$IP/$TEMPNAME.ovpn"
 	echo "If you want to add more clients, you simply need to run this script again!"
 fi
