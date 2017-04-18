@@ -389,6 +389,8 @@ exit 0' > $RCLOCAL
 	if [[ "$OS" = 'debian' ]]; then
 		# Little hack to check for systemd
 		if pgrep systemd-journal; then
+			sed -i "/LimitNPROC/d" /lib/systemd/system/openvpn@.service
+			systemctl daemon-reload
 			systemctl restart openvpn@server.service
 			systemctl restart apache2.service
 		else
