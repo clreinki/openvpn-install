@@ -92,7 +92,7 @@ if [[ -e /etc/openvpn/server.conf ]]; then
 			newclient "$CLIENT"
 			# Generates random string for qr code
 			TEMPNAME=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 32 | head -n 1)
-			cp $CLIENT.ovpn /var/www/html/$TEMPNAME.ovpn
+			cp $(pwd)/$CLIENT.ovpn /var/www/html/$TEMPNAME.ovpn
 			echo ""
 			qrcode-terminal "http://$IP/$TEMPNAME.ovpn"
 			echo "Your client configuration is available at" ~/"$CLIENT.ovpn for secure transfer"
@@ -428,7 +428,7 @@ verb 3" > /etc/openvpn/client-common.txt
 	newclient "$CLIENT"
 	# Generates random string for qr code
 	TEMPNAME=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 32 | head -n 1)
-	cp $CLIENT.ovpn /var/www/html/$TEMPNAME.ovpn
+	cp $(pwd)/$CLIENT.ovpn /var/www/html/$TEMPNAME.ovpn
 	echo ""
 	echo "Finished!"
 	echo ""
