@@ -1,7 +1,7 @@
 ## openvpn-install
 VPN-in-a-Box is an OpenVPN installer for Debian 8 , Ubuntu 14.04/16.04, and CentOS 7.  It is built upon the work of [Nyr's OpenVPN scripts](https://github.com/Nyr/openvpn-install).
 
-This script will let you setup your own VPN server in no more than a minute, even if you haven't used OpenVPN before. It has been designed to be as simple and secure.
+This script will let you setup your own VPN server in no more than a minute, even if you haven't used OpenVPN before. It has been designed to be simple and secure.
 
 ### Installation
 Run the script and follow the assistant:
