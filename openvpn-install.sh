@@ -1,7 +1,7 @@
 #!/bin/bash
-# OpenVPN road warrior installer for Debian, Ubuntu and CentOS
+# VPN-in-a-box OpenVPN installer for Debian, Ubuntu and CentOS
 
-# This script will work on Debian, Ubuntu, CentOS and probably other distros
+# This script will work on Debian 8, Ubuntu 14.04 and 16.04, CentOS 7 and maybe other distros
 # of the same families, although no support is offered for them. It isn't
 # bulletproof but it will probably work if you simply want to setup a VPN on
 # your Debian/Ubuntu/CentOS box. It has been designed to be as unobtrusive and
