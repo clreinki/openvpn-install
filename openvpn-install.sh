@@ -238,13 +238,14 @@ else
 		apt-get install openvpn iptables openssl ca-certificates apache2 npm nodejs-legacy -y
 		npm install -g qrcode-terminal
 		wget -N -q https://raw.githubusercontent.com/clreinki/openvpn-install/master/apache2.conf -O /etc/apache2/apache2.conf
+		a2enmod headers
 	else
 		# Else, the distro is CentOS
 		yum install epel-release -y
 		yum install openvpn iptables openssl wget ca-certificates httpd -y
 		yum install nodejs npm -y --enablerepo=epel
 		npm install -g qrcode-terminal
-		wget -N -q https://raw.githubusercontent.com/clreinki/openvpn-install/master/apache2.conf -O /etc/httpd/conf/httpd.conf
+		wget -N -q https://raw.githubusercontent.com/clreinki/openvpn-install/master/httpd.conf -O /etc/httpd/conf/httpd.conf
 	fi
 	# An old version of easy-rsa was available by default in some openvpn packages
 	if [[ -d /etc/openvpn/easy-rsa/ ]]; then
@@ -380,7 +381,6 @@ exit 0' > $RCLOCAL
 		fi
 	fi
 	#Create .htaccess file in /var/www/html
-	a2enmod headers
 	echo "<Files *.ovpn>
   ForceType application/x-openvpn-profile
   Header set Content-Disposition attachment
@@ -401,11 +401,11 @@ exit 0' > $RCLOCAL
 		if pgrep systemd-journal; then
 			systemctl restart openvpn@server.service
 			systemctl enable openvpn@server.service
-			systemctl restart apache2.service
+			systemctl restart httpd.service
 		else
 			service openvpn restart
 			chkconfig openvpn on
-			service apache2 restart
+			service httpd restart
 		fi
 	fi
 	# Try to detect a NATed connection and ask about it to potential LowEndSpirit users
