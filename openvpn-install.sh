@@ -77,9 +77,11 @@ if [[ -e /etc/openvpn/server.conf ]]; then
 		echo "   1) Add a new user"
 		echo "   2) Revoke an existing user"
 		echo "   3) Remove OpenVPN"
-		echo "   4) Remove existing .ovpn files from HTTP"
-		echo "   5) Exit"
-		read -p "Select an option [1-4]: " option
+		echo "   4) Exit"
+		if [[ -e /etc/openvpn/web.enabled ]]; then
+			echo "   5) Remove existing .ovpn files from HTTP"
+		fi
+		read -p "Select an option [1-5]: " option
 		case $option in
 			1) 
 			echo ""
@@ -141,7 +143,10 @@ if [[ -e /etc/openvpn/server.conf ]]; then
 					IP=$(firewall-cmd --direct --get-rules ipv4 nat POSTROUTING | grep '\-s 10.8.0.0/24 -j SNAT --to ' | cut -d " " -f 7)
 					# Using both permanent and not permanent rules to avoid a firewalld reload.
 					firewall-cmd --zone=public --remove-port=$PORT/$PROTOCOL
-					firewall-cmd --zone=public --remove-port=80/tcp
+					if [[ -e /etc/openvpn/web.enabled ]]; then
+						firewall-cmd --zone=public --remove-port=80/tcp
+						firewall-cmd --permanent --zone=public --remove-port=80/tcp
+					fi
 					firewall-cmd --zone=trusted --remove-source=10.8.0.0/24
 					firewall-cmd --permanent --zone=public --remove-port=$PORT/$PROTOCOL
 					firewall-cmd --permanent --zone=trusted --remove-source=10.8.0.0/24
@@ -153,7 +158,10 @@ if [[ -e /etc/openvpn/server.conf ]]; then
 					sed -i '/iptables -t nat -A POSTROUTING -s 10.8.0.0\/24 -j SNAT --to /d' $RCLOCAL
 					if iptables -L -n | grep -qE '^ACCEPT'; then
 						iptables -D INPUT -p $PROTOCOL --dport $PORT -j ACCEPT
-						iptables -D INPUT -p tcp --dport 80 -j ACCEPT
+						if [[ -e /etc/openvpn/web.enabled ]]; then
+							iptables -D INPUT -p tcp --dport 80 -j ACCEPT
+							sed -i "/iptables -D INPUT -p tcp --dport 80 -j ACCEPT/d" $RCLOCAL
+						fi
 						iptables -D FORWARD -s 10.8.0.0/24 -j ACCEPT
 						iptables -D FORWARD -m state --state RELATED,ESTABLISHED -j ACCEPT
 						sed -i "/iptables -I INPUT -p $PROTOCOL --dport $PORT -j ACCEPT/d" $RCLOCAL
@@ -183,16 +191,16 @@ if [[ -e /etc/openvpn/server.conf ]]; then
 			fi
 			exit
 			;;
-			4)
+			5)
 			rm -f /var/www/html/*.ovpn
 			exit
 			;;
-			5) exit;;
+			4) exit;;
 		esac
 	done
 else
 	clear
-	echo 'Welcome to this quick OpenVPN "road warrior" installer'
+	echo 'Welcome to this quick OpenVPN installer'
 	echo ""
 	# OpenVPN setup and first user creation
 	echo "I need to ask you a few questions before starting the setup"
@@ -227,6 +235,10 @@ else
 	echo "   6) Verisign"
 	read -p "DNS [1-6]: " -e -i 1 DNS
 	echo ""
+	echo "Do you want to install a web server for downloading client files?"
+	echo "Note that downloading files via HTTP is insecure and not recommended"
+	read -p "Install web server [y/n]? " -e -i n WEB
+	echo ""
 	echo "Finally, tell me your name for the client certificate"
 	echo "Please, use one word only, no special characters"
 	read -p "Client name: " -e -i client CLIENT
@@ -235,17 +247,22 @@ else
 	read -n1 -r -p "Press any key to continue..."
 	if [[ "$OS" = 'debian' ]]; then
 		apt-get update
-		apt-get install openvpn iptables openssl ca-certificates apache2 npm nodejs-legacy -y
-		npm install -g qrcode-terminal
-		wget -N -q https://raw.githubusercontent.com/clreinki/openvpn-install/master/apache2.conf -O /etc/apache2/apache2.conf
-		a2enmod headers
+		apt-get install openvpn iptables openssl ca-certificates -y
+		if [[ "$WEB" = 'y' ]]; then
+			apt-get install apache2 npm nodejs-legacy -y
+			npm install -g qrcode-terminal
+			wget -N -q https://raw.githubusercontent.com/clreinki/openvpn-install/master/apache2.conf -O /etc/apache2/apache2.conf
+			a2enmod headers
+		fi
 	else
 		# Else, the distro is CentOS
-		yum install epel-release -y
-		yum install openvpn iptables openssl wget ca-certificates httpd -y
-		yum install nodejs npm -y --enablerepo=epel
-		npm install -g qrcode-terminal
-		wget -N -q https://raw.githubusercontent.com/clreinki/openvpn-install/master/httpd.conf -O /etc/httpd/conf/httpd.conf
+		yum install openvpn iptables openssl wget ca-certificates -y
+		if [[ "$WEB" = 'y' ]]; then
+			yum install epel-release -y
+			yum install nodejs npm httpd -y --enablerepo=epel
+			npm install -g qrcode-terminal
+			wget -N -q https://raw.githubusercontent.com/clreinki/openvpn-install/master/httpd.conf -O /etc/httpd/conf/httpd.conf
+		fi
 	fi
 	# An old version of easy-rsa was available by default in some openvpn packages
 	if [[ -d /etc/openvpn/easy-rsa/ ]]; then
@@ -338,7 +355,10 @@ crl-verify crl.pem" >> /etc/openvpn/server.conf
 		# We don't use --add-service=openvpn because that would only work with
 		# the default port and protocol.
 		firewall-cmd --zone=public --add-port=$PORT/$PROTOCOL
-		firewall-cmd --zone=public --add-port=80/tcp
+		if [[ "$WEB" = 'y' ]]; then
+			firewall-cmd --zone=public --add-port=80/tcp
+			firewall-cmd --permanent --zone=public --add-port=80/tcp
+		fi
 		firewall-cmd --zone=trusted --add-source=10.8.0.0/24
 		firewall-cmd --permanent --zone=public --add-port=$PORT/$PROTOCOL
 		firewall-cmd --permanent --zone=trusted --add-source=10.8.0.0/24
@@ -359,8 +379,11 @@ exit 0' > $RCLOCAL
 			# If iptables has at least one REJECT rule, we asume this is needed.
 			# Not the best approach but I can't think of other and this shouldn't
 			# cause problems.
+			if [[ "$WEB" = 'y' ]]; then
+				iptables -I INPUT -p tcp --dport 80 -j ACCEPT
+				sed -i "1 a\iptables -I INPUT -p tcp --dport 80 -j ACCEPT" $RCLOCAL
+			fi
 			iptables -I INPUT -p $PROTOCOL --dport $PORT -j ACCEPT
-			iptables -I INPUT -p tcp --dport 80 -j ACCEPT
 			iptables -I FORWARD -s 10.8.0.0/24 -j ACCEPT
 			iptables -I FORWARD -m state --state RELATED,ESTABLISHED -j ACCEPT
 			sed -i "1 a\iptables -I INPUT -p $PROTOCOL --dport $PORT -j ACCEPT" $RCLOCAL
@@ -380,11 +403,13 @@ exit 0' > $RCLOCAL
 			fi
 		fi
 	fi
-	#Create .htaccess file in /var/www/html
+	if [[ "$WEB" = 'y' ]]; then
+		#Create .htaccess file in /var/www/html
 	echo "<Files *.ovpn>
   ForceType application/x-openvpn-profile
   Header set Content-Disposition attachment
 </Files>" >> /var/www/html/.htaccess
+	fi
 	# And finally, restart OpenVPN and Apache2
 	if [[ "$OS" = 'debian' ]]; then
 		# Little hack to check for systemd
@@ -392,20 +417,28 @@ exit 0' > $RCLOCAL
 			sed -i "/LimitNPROC/d" /lib/systemd/system/openvpn@.service
 			systemctl daemon-reload
 			systemctl restart openvpn@server.service
-			systemctl restart apache2.service
+			if [[ "$WEB" = 'y' ]]; then
+				systemctl restart apache2.service
+			fi
 		else
 			/etc/init.d/openvpn restart
-			/etc/init.d/apache2 restart
+			if [[ "$WEB" = 'y' ]]; then
+				/etc/init.d/apache2 restart
+			fi
 		fi
 	else
 		if pgrep systemd-journal; then
 			systemctl restart openvpn@server.service
 			systemctl enable openvpn@server.service
-			systemctl restart httpd.service
+			if [[ "$WEB" = 'y' ]]; then
+				systemctl restart httpd.service
+			fi
 		else
 			service openvpn restart
 			chkconfig openvpn on
-			service httpd restart
+			if [[ "$WEB" = 'y' ]]; then
+				service httpd restart
+			fi
 		fi
 	fi
 	# Try to detect a NATed connection and ask about it to potential LowEndSpirit users
@@ -440,14 +473,19 @@ key-direction 1
 verb 3" > /etc/openvpn/client-common.txt
 	# Generates the custom client.ovpn
 	newclient "$CLIENT"
-	# Generates random string for qr code
-	TEMPNAME=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 32 | head -n 1)
-	cp ~/$CLIENT.ovpn /var/www/html/$TEMPNAME.ovpn
+	
 	echo ""
 	echo "Finished!"
 	echo ""
-	qrcode-terminal "http://$IP/$TEMPNAME.ovpn"
+	if [[ "$WEB" = 'y' ]]; then
+		# Generates random string for qr code
+		TEMPNAME=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 32 | head -n 1)
+		cp ~/$CLIENT.ovpn /var/www/html/$TEMPNAME.ovpn
+		qrcode-terminal "http://$IP/$TEMPNAME.ovpn"
+		echo "Client configuration is available for insecure download from http://$IP/$TEMPNAME.ovpn"
+		# Creates file web.enabled to detect if webserver was installed
+		echo "yes" > /etc/openvpn/web.enabled
+	fi
 	echo "Your client configuration is available at" ~/"$CLIENT.ovpn for secure transfer"
-	echo "Client configuration is also available for insecure download from http://$IP/$TEMPNAME.ovpn"
 	echo "If you want to add more clients, you simply need to run this script again!"
 fi
