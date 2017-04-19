@@ -1,18 +1,14 @@
 ## openvpn-install
-OpenVPN [road warrior](http://en.wikipedia.org/wiki/Road_warrior_%28computing%29) installer for Debian, Ubuntu and CentOS.
+VPN-in-a-Box is an OpenVPN installer for Debian 8 , Ubuntu 14.04/16.04, and CentOS 6/7.  It is built upon the work of [Nyr's OpenVPN scripts](https://github.com/Nyr/openvpn-install).
 
-This script will let you setup your own VPN server in no more than a minute, even if you haven't used OpenVPN before. It has been designed to be as unobtrusive and universal as possible.
+This script will let you setup your own VPN server in no more than a minute, even if you haven't used OpenVPN before. It has been designed to be as simple and secure.
 
 ### Installation
 Run the script and follow the assistant:
 
-`wget https://git.io/vpn -O openvpn-install.sh && bash openvpn-install.sh`
+`wget https://git.io/vSAjf -O openvpn-install.sh && bash openvpn-install.sh`
 
 Once it ends, you can run it again to add more users, remove some of them or even completely uninstall OpenVPN.
 
-### I want to run my own VPN but don't have a server for that
-You can get a little VPS for just $2.99/month at [Bandwagon Host](https://bandwagonhost.com/aff.php?aff=575&pid=12).
-
-### Donations
-
-If you want to show your appreciation, you can donate via [PayPal](https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=VBAYDL34Z7J6L) or [Bitcoin](https://pastebin.com/raw/M2JJpQpC). Thanks!
+### Note about .ovpn distribution
+Typically, you want to distribute the .ovpn client files in a secure manner (such as using SFTP to download them from your server.  However, I've included a QR code generator that provides an HTTP link to the .ovpn file for easy installation on mobile devices.  Note that this is not securely transmitted and is optionally there if you prefer the ease of access.
